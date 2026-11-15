@@ -679,16 +679,16 @@
       .map((n) => ({ node: n, trackDist: snapToTrack(n.xPct, n.yPct).distAlong }))
       .sort((a, b) => a.trackDist - b.trackDist);
 
-    const firstCrossingDist = sortedNodes[0].trackDist;
+    const losBanosDist = TRACK_METRICS.segs[3].startDist; // 4. Los Baños Station
     const lastCrossingDist = sortedNodes[sortedNodes.length - 1].trackDist;
-    const startDist = Math.max(0, firstCrossingDist - 12);
+    const startDist = losBanosDist;
     const endDist = Math.min(TRACK_METRICS.total, lastCrossingDist + 9);
 
     const passedSet = new Set();
     const marker = document.getElementById('trainMarker');
     marker.classList.remove('hidden');
 
-    appendLog('TRAIN', 'PNR IPC-04 departed IRRI sector toward San Pablo Pilot Crossings (54 km/h).');
+    appendLog('TRAIN', 'PNR IPC-04 departed Los Baños Station southbound toward San Pablo Pilot Crossings (54 km/h).');
 
     let currentDist = startDist;
     let lastTs = performance.now();
@@ -697,7 +697,7 @@
       if (!simController.running) return;
       const dt = (now - lastTs) / 1000;
       lastTs = now;
-      currentDist += 1.35 * dt;
+      currentDist += 0.65 * dt;
 
       const pos = pointAtDistance(currentDist);
       marker.style.left = pos.x + '%';
