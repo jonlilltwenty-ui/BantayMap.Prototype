@@ -37,26 +37,86 @@
 
   const TRACK_METRICS = buildTrackMetrics(TRACK_WAYPOINTS);
 
+  function getSvgTrackPath() {
+    return document.getElementById('pnrTrackLine');
+  }
+
+  function getTrackTotalLength() {
+    const pathEl = getSvgTrackPath();
+    if (pathEl && typeof pathEl.getTotalLength === 'function') {
+      return pathEl.getTotalLength();
+    }
+    return TRACK_METRICS.total;
+  }
+
   function pointAtDistance(dist) {
+    const pathEl = getSvgTrackPath();
+    if (pathEl && typeof pathEl.getTotalLength === 'function') {
+      const total = pathEl.getTotalLength();
+      const clamped = Math.max(0, Math.min(total, dist));
+      const pt = pathEl.getPointAtLength(clamped);
+      const p1 = pathEl.getPointAtLength(Math.max(0, clamped - 1));
+      const p2 = pathEl.getPointAtLength(Math.min(total, clamped + 1));
+      const angleDeg = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
+      return {
+        x: (pt.x / 1000) * 100,
+        y: (pt.y / 625) * 100,
+        svgX: pt.x,
+        svgY: pt.y,
+        angleDeg
+      };
+    }
     const clamped = Math.max(0, Math.min(TRACK_METRICS.total, dist));
     for (const seg of TRACK_METRICS.segs) {
       if (clamped <= seg.startDist + seg.len) {
         const t = seg.len === 0 ? 0 : (clamped - seg.startDist) / seg.len;
+        const x = seg.a.x + (seg.b.x - seg.a.x) * t;
+        const y = seg.a.y + (seg.b.y - seg.a.y) * t;
         const dxSvg = (seg.b.x - seg.a.x) * 10;
         const dySvg = (seg.b.y - seg.a.y) * 6.25;
         const angleDeg = (Math.atan2(dySvg, dxSvg) * 180) / Math.PI;
-        return {
-          x: seg.a.x + (seg.b.x - seg.a.x) * t,
-          y: seg.a.y + (seg.b.y - seg.a.y) * t,
-          angleDeg
-        };
+        return { x, y, svgX: x * 10, svgY: y * 6.25, angleDeg };
       }
     }
     const last = TRACK_WAYPOINTS[TRACK_WAYPOINTS.length - 1];
-    return { x: last.x, y: last.y, angleDeg: 18 };
+    return { x: last.x, y: last.y, svgX: last.x * 10, svgY: last.y * 6.25, angleDeg: 18 };
   }
 
   function snapToTrack(px, py) {
+    const pathEl = getSvgTrackPath();
+    if (pathEl && typeof pathEl.getTotalLength === 'function') {
+      const targetSvgX = (px / 100) * 1000;
+      const targetSvgY = (py / 100) * 625;
+      const total = pathEl.getTotalLength();
+      let bestLen = 0;
+      let bestPt = pathEl.getPointAtLength(0);
+      let bestDist = Infinity;
+      const step = 2;
+      for (let len = 0; len <= total; len += step) {
+        const pt = pathEl.getPointAtLength(len);
+        const d = Math.hypot(targetSvgX - pt.x, targetSvgY - pt.y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestLen = len;
+          bestPt = pt;
+        }
+      }
+      for (let len = Math.max(0, bestLen - step); len <= Math.min(total, bestLen + step); len += 0.25) {
+        const pt = pathEl.getPointAtLength(len);
+        const d = Math.hypot(targetSvgX - pt.x, targetSvgY - pt.y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestLen = len;
+          bestPt = pt;
+        }
+      }
+      return {
+        x: Number(((bestPt.x / 1000) * 100).toFixed(2)),
+        y: Number(((bestPt.y / 625) * 100).toFixed(2)),
+        distAlong: bestLen,
+        perpDist: bestDist
+      };
+    }
     let best = { x: px, y: py, distAlong: 0, perpDist: Infinity };
     for (const seg of TRACK_METRICS.segs) {
       const vx = seg.b.x - seg.a.x;
@@ -686,10 +746,11 @@
       .map((n) => ({ node: n, trackDist: snapToTrack(n.xPct, n.yPct).distAlong }))
       .sort((a, b) => a.trackDist - b.trackDist);
 
-    const losBanosDist = TRACK_METRICS.segs[3].startDist; // 4. Los Baños Station
+    const totalTrackLen = getTrackTotalLength();
+    const losBanosDist = snapToTrack(21.0, 23.68).distAlong; // 4. Los Baños Station on blue line
     const lastCrossingDist = sortedNodes[sortedNodes.length - 1].trackDist;
     const startDist = losBanosDist;
-    const endDist = Math.min(TRACK_METRICS.total, lastCrossingDist + 9);
+    const endDist = Math.min(totalTrackLen, lastCrossingDist + 75);
 
     const passedSet = new Set();
     const marker = document.getElementById('trainMarker');
@@ -697,7 +758,7 @@
     marker.classList.remove('hidden');
     if (svgTrain) svgTrain.classList.remove('hidden');
 
-    appendLog('TRAIN', 'PNR IPC-04 departed Los Baños Station southbound toward San Pablo Pilot Crossings (54 km/h).');
+    appendLog('TRAIN', 'PNR IPC-04 departed Los Baños Station southbound along the blue PNR line (54 km/h).');
 
     let currentDist = startDist;
     let lastTs = performance.now();
@@ -706,22 +767,20 @@
       if (!simController.running) return;
       const dt = (now - lastTs) / 1000;
       lastTs = now;
-      currentDist += 0.65 * dt;
+      currentDist += 5.5 * dt; // Smooth, slow progression in SVG path units/sec
 
       const pos = pointAtDistance(currentDist);
       marker.style.left = pos.x + '%';
       marker.style.top = pos.y + '%';
       if (svgTrain) {
-        const svgX = (pos.x * 10).toFixed(2);
-        const svgY = (pos.y * 6.25).toFixed(2);
-        svgTrain.setAttribute('transform', `translate(${svgX}, ${svgY}) rotate(${pos.angleDeg.toFixed(1)})`);
+        svgTrain.setAttribute('transform', `translate(${pos.svgX.toFixed(2)}, ${pos.svgY.toFixed(2)}) rotate(${pos.angleDeg.toFixed(1)})`);
       }
 
       sortedNodes.forEach(({ node, trackDist }) => {
         if (passedSet.has(node.id)) return;
         const delta = trackDist - currentDist;
 
-        if (delta <= 10.5 && delta > 5.5 && node.status === 'CLEAR') {
+        if (delta <= 85 && delta > 45 && node.status === 'CLEAR') {
           node.status = 'PRE_ALERT';
           node.etaSec = 28;
           node.sensors = { cam: true, vib: false, radarKmh: 54 };
@@ -738,9 +797,9 @@
           });
           triggerMarshalSmsDispatch(node, 'APPROACH_PRE_ALERT');
           appendLog('ALERT', `${node.shortName} 2-of-3 fusion locked (AI Vision + Radar) — PRE_ALERT.`);
-        } else if (delta <= 5.5 && delta > 0 && (node.status === 'PRE_ALERT' || node.status === 'CLEAR')) {
+        } else if (delta <= 45 && delta > 0 && (node.status === 'PRE_ALERT' || node.status === 'CLEAR')) {
           node.status = 'GATE_LOWERED';
-          node.etaSec = Math.max(1, Math.round(delta * 4));
+          node.etaSec = Math.max(1, Math.round(delta / 2));
           node.sensors = { cam: true, vib: true, radarKmh: 54 };
           appState.selectedNodeId = node.id;
           appendLog('GATE', `${node.shortName} drop arms lowered (staggered 3s delay, 25s window).`);
