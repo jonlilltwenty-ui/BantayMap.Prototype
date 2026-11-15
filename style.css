@@ -1,0 +1,92 @@
+/* ============================================================================
+   Bantay Map Prototype — Project BantayRiles
+   Extracted Stylesheet (style.css)
+   ============================================================================ */
+
+body {
+  background-color: #F8FAFC;
+  color: #0F172A;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Crisp minimal scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Crossing Pin Markers on Corridor Map */
+.crossing-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: transform 0.15s ease;
+}
+.crossing-pin:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  z-index: 30;
+}
+.crossing-pin.edit-draggable {
+  cursor: grab;
+  outline: 2px dashed #1D4ED8;
+  outline-offset: 4px;
+  border-radius: 9999px;
+}
+.crossing-pin.edit-draggable:active {
+  cursor: grabbing;
+}
+
+@keyframes subtleRing {
+  0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.45); }
+  70% { box-shadow: 0 0 0 10px rgba(217, 119, 6, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+}
+.ring-alert {
+  animation: subtleRing 1.6s infinite;
+}
+
+@keyframes holdPulse {
+  0% { box-shadow: 0 0 0 0 rgba(29, 78, 216, 0.45); }
+  70% { box-shadow: 0 0 0 10px rgba(29, 78, 216, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(29, 78, 216, 0); }
+}
+.ring-hold {
+  animation: holdPulse 1.3s infinite;
+}
+
+/* Moving PNR Train Marker */
+.train-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+/* Hotspot Overlay Circles */
+.hotspot-blob {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 12;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}

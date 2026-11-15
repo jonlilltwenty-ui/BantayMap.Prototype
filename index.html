@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bantay Map Prototype — Project BantayRiles Operations</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            pnr: {
+              50: '#EFF6FF',
+              100: '#DBEAFE',
+              600: '#2563EB',
+              700: '#1D4ED8',
+              800: '#1E40AF',
+            }
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- TOP HEADER BAR -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-pnr-700 text-white flex items-center justify-center font-bold text-sm tracking-tight shrink-0">
+          BR
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm font-semibold text-slate-900 tracking-tight truncate">Bantay Map Prototype</h1>
+            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+              PNR IPC Southern Corridor
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 truncate">Calamba – Lucena Sector • 5.0s Post-Pass Hold • Hotspot &amp; Telemetry Prototype</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <span id="liveClock" class="hidden md:inline-block font-mono text-xs text-slate-500 tabular-nums mr-1">--:--:-- PST</span>
+        <button id="btnOpenGuide" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-pnr-50 text-pnr-700 border border-pnr-100 hover:bg-pnr-100 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          System Guide
+        </button>
+        <button id="btnToggleDevMenu" type="button" aria-expanded="false" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition">
+          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+          </svg>
+          Developer Menu
+        </button>
+      </div>
+    </div>
+
+    <!-- COLLAPSIBLE DEVELOPER MENU -->
+    <div id="developerMenuBar" class="hidden bg-slate-900 text-slate-200 border-t border-slate-800">
+      <div class="max-w-[1440px] mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-semibold uppercase tracking-wider">DEV TOOLS</span>
+          <span class="text-slate-400">State Rollback &amp; Custom Map Overlay Controls</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="checkpointSelect" class="text-[11px] font-medium text-slate-400">Checkpoint:</label>
+          <select id="checkpointSelect" class="h-7 rounded border border-slate-700 bg-slate-800 px-2 text-xs text-slate-100 focus:outline-none focus:border-pnr-600"></select>
+          <button id="btnSaveSnapshot" type="button" class="h-7 px-2.5 rounded text-xs font-medium bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 transition">
+            Save Snapshot
+          </button>
+          <button id="btnRollback" type="button" class="h-7 px-2.5 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition">
+            Rollback
+          </button>
+          <span class="hidden sm:inline-block h-4 w-px bg-slate-700 mx-1"></span>
+          <label for="mapImageInput" class="h-7 inline-flex items-center gap-1.5 px-2.5 rounded text-xs font-medium bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 cursor-pointer transition">
+            Upload Map Image
+          </label>
+          <input id="mapImageInput" type="file" accept="image/*" class="hidden" />
+          <button id="btnResetMapImg" type="button" class="hidden h-7 px-2.5 rounded text-xs font-medium bg-slate-800 text-rose-300 border border-slate-700 hover:bg-slate-700 transition">
+            Reset Map
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+
+    <!-- TOP KPI STRIP -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div class="bg-white border border-slate-200 rounded-xl p-3.5">
+        <div class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Pilot Node Uptime</div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiUptime" class="text-xl font-bold text-slate-900 tabular-nums">99.8%</span>
+          <span class="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">72h LiFePO4 OK</span>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-3.5">
+        <div class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">2-of-3 Sensor Events</div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiSensorEvents" class="text-xl font-bold text-slate-900 tabular-nums">2</span>
+          <span class="text-[11px] font-medium text-pnr-700 bg-pnr-50 border border-pnr-100 px-1.5 py-0.5 rounded">0 False Triggers</span>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-3.5">
+        <div class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Marshal ≤2m Compliance</div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiMarshalRate" class="text-xl font-bold text-slate-900 tabular-nums">100%</span>
+          <span class="text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Target ≤ 120s</span>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-3.5">
+        <div class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Hotspot QR Reports</div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiIncidents" class="text-xl font-bold text-slate-900 tabular-nums">3</span>
+          <button id="btnExportCsv" type="button" class="text-[11px] font-medium text-pnr-700 hover:underline">Export CSV ↓</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRIMARY 12-COLUMN GRID -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+      <!-- LEFT COLUMN (7 COLS): INTERACTIVE GEOREFERENCED CORRIDOR MAP -->
+      <div class="lg:col-span-7 space-y-5">
+        <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <!-- Map Toolbar -->
+          <div class="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900">Laguna – Quezon PNR IPC Corridor Map</h2>
+              <p class="text-xs text-slate-500">90 km Georeferenced Route • Calamba to Lucena (12 Active Stops)</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btnToggleHotspots" type="button" class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition">
+                Hotspots: ON
+              </button>
+              <button id="btnTogglePinEdit" type="button" class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 transition">
+                Align Pins: OFF
+              </button>
+              <button id="btnSimulateCorridor" type="button" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-pnr-700 text-white hover:bg-pnr-800 transition shadow-sm">
+                Simulate Corridor Run (Spot 1 → Spot 2)
+              </button>
+            </div>
+          </div>
+
+          <!-- Zoomable & Pannable Viewport -->
+          <div id="mapViewport" class="relative w-full aspect-[16/10] bg-slate-100 overflow-hidden select-none cursor-grab">
+            <!-- Zoom Controls -->
+            <div class="absolute top-3 left-3 z-30 flex flex-col bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+              <button id="btnZoomIn" type="button" title="Zoom In" class="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-100 font-semibold text-sm border-b border-slate-200">+</button>
+              <button id="btnZoomOut" type="button" title="Zoom Out" class="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-100 font-semibold text-sm border-b border-slate-200">−</button>
+              <button id="btnZoomReset" type="button" title="Reset Zoom" class="w-8 h-7 flex items-center justify-center text-[10px] font-mono text-slate-600 hover:bg-slate-100">100%</button>
+            </div>
+
+            <!-- Zoom Level Pill -->
+            <div class="absolute top-3 right-3 z-30 px-2 py-1 rounded bg-white/90 backdrop-blur border border-slate-200 text-[11px] font-mono text-slate-600">
+              Zoom: <span id="zoomReadout">100%</span>
+            </div>
+
+            <!-- Transformable Stage -->
+            <div id="corridorMapStage" class="relative w-full h-full origin-top-left">
+              <!-- Custom Uploaded Map Image -->
+              <img id="customMapImg" alt="Custom Corridor Map" class="hidden absolute inset-0 w-full h-full object-contain pointer-events-none" />
+
+              <!-- Georeferenced Vector Map of Laguna & Quezon PNR Southern Corridor -->
+              <svg id="builtinLagunaQuezonSvg" viewBox="0 0 1000 625" class="w-full h-full block">
+                <defs>
+                  <linearGradient id="waterGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#DBEAFE" />
+                    <stop offset="100%" stop-color="#BFDBFE" />
+                  </linearGradient>
+                  <pattern id="gridPattern" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#E2E8F0" stroke-width="0.7" />
+                  </pattern>
+                </defs>
+
+                <!-- Base Land & Coordinate Grid -->
+                <rect width="1000" height="625" fill="#F1F5F9" />
+                <rect width="1000" height="625" fill="url(#gridPattern)" />
+
+                <!-- LAGUNA DE BAY (North Coastline) -->
+                <path d="M 0,0 L 660,0 L 620,75 L 540,120 L 420,128 L 280,148 L 195,126 L 125,65 L 40,42 L 0,48 Z" fill="url(#waterGrad)" stroke="#93C5FD" stroke-width="1.5" />
+                <text x="315" y="68" fill="#1E40AF" font-size="14" font-weight="700" letter-spacing="2.5" opacity="0.75">LAGUNA DE BAY</text>
+
+                <!-- TAYABAS BAY (Southern Quezon Coastline) -->
+                <path d="M 565,625 C 615,575 720,555 835,542 C 910,535 965,515 1000,492 L 1000,625 Z" fill="url(#waterGrad)" stroke="#93C5FD" stroke-width="1.5" />
+                <text x="745" y="592" fill="#1E40AF" font-size="13" font-weight="700" letter-spacing="2" opacity="0.75">TAYABAS BAY</text>
+
+                <!-- PROVINCIAL BOUNDARY: LAGUNA vs QUEZON -->
+                <path d="M 410,130 C 425,215 445,295 456,375 C 464,435 448,525 430,625" fill="none" stroke="#94A3B8" stroke-width="1.8" stroke-dasharray="6,5" />
+                <text x="145" y="340" fill="#64748B" font-size="13" font-weight="700" letter-spacing="3">LAGUNA</text>
+                <text x="695" y="210" fill="#64748B" font-size="13" font-weight="700" letter-spacing="3">QUEZON PROVINCE</text>
+
+                <!-- VOLCANIC LANDMARKS -->
+                <!-- Mt. Makiling (14.1358°N, 121.1944°E) -->
+                <g transform="translate(215, 212)">
+                  <polygon points="0,-22 22,14 -22,14" fill="#CBD5E1" stroke="#94A3B8" stroke-width="1.2" />
+                  <text x="0" y="28" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">Mt. Makiling (1,090m)</text>
+                </g>
+
+                <!-- Mt. Banahaw (14.0675°N, 121.4925°E — North of Candelaria/Sariaya) -->
+                <g transform="translate(615, 295)">
+                  <polygon points="0,-28 28,18 -28,18" fill="#CBD5E1" stroke="#94A3B8" stroke-width="1.2" />
+                  <text x="0" y="32" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">Mt. Banahaw (2,170m)</text>
+                </g>
+
+                <!-- MAHARLIKA HIGHWAY (AH26 Reference) -->
+                <path d="M 65,92 L 245,172 L 352,328 L 468,382 L 605,408 L 765,442 L 885,480" fill="none" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round" />
+
+                <!-- PNR IPC SOUTHERN CORRIDOR TRACK (Georeferenced 12-Stop Path) -->
+                <path id="pnrTrackCasing"
+                  d="M 62,76 L 138,142 L 168,154 L 210,148 L 242,158 L 278,164 L 348,332 L 465,388 L 605,412 L 692,428 L 768,448 L 882,482"
+                  fill="none" stroke="#1E293B" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+                <path id="pnrTrackLine"
+                  d="M 62,76 L 138,142 L 168,154 L 210,148 L 242,158 L 278,164 L 348,332 L 465,388 L 605,412 L 692,428 L 768,448 L 882,482"
+                  fill="none" stroke="#3B82F6" stroke-width="2.2" stroke-dasharray="7,5" stroke-linecap="round" stroke-linejoin="round" />
+
+                <!-- SAN PABLO PILOT SECTOR HIGHLIGHT -->
+                <circle cx="348" cy="332" r="56" fill="#1D4ED8" fill-opacity="0.06" stroke="#1D4ED8" stroke-width="1.2" stroke-dasharray="4,3" />
+                <text x="348" y="268" text-anchor="middle" fill="#1D4ED8" font-size="10" font-weight="700">SAN PABLO PILOT SECTOR</text>
+
+                <!-- 12 ACTIVE PNR STATIONS & FLAG STOPS -->
+                <g font-size="10.5" font-weight="600" fill="#0F172A">
+                  <!-- 1. Calamba -->
+                  <circle cx="62" cy="76" r="4.5" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.5" />
+                  <text x="54" y="65" text-anchor="end">1. Calamba</text>
+
+                  <!-- 2. Pansol -->
+                  <circle cx="138" cy="142" r="3" fill="#475569" stroke="#FFFFFF" stroke-width="1" />
+                  <text x="130" y="156" text-anchor="end" font-size="9.5" fill="#475569">2. Pansol</text>
+
+                  <!-- 3. Masili -->
+                  <circle cx="168" cy="154" r="3" fill="#475569" stroke="#FFFFFF" stroke-width="1" />
+                  <text x="166" y="170" text-anchor="middle" font-size="9.5" fill="#475569">3. Masili</text>
+
+                  <!-- 4. Los Baños -->
+                  <circle cx="210" cy="148" r="4" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.5" />
+                  <text x="210" y="137" text-anchor="middle">4. Los Baños</text>
+
+                  <!-- 5. College (UPLB) -->
+                  <circle cx="242" cy="158" r="3" fill="#475569" stroke="#FFFFFF" stroke-width="1" />
+                  <text x="248" y="147" text-anchor="start" font-size="9.5" fill="#475569">5. College</text>
+
+                  <!-- 6. IRRI (Bay) -->
+                  <circle cx="278" cy="164" r="3.5" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.2" />
+                  <text x="288" y="162" text-anchor="start">6. IRRI (Bay)</text>
+
+                  <!-- 7. San Pablo -->
+                  <circle cx="348" cy="332" r="5" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.8" />
+                  <text x="334" y="336" text-anchor="end" font-weight="700">7. San Pablo</text>
+
+                  <!-- 8. Tiaong (Lalig) -->
+                  <circle cx="465" cy="388" r="4" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.5" />
+                  <text x="462" y="405" text-anchor="middle">8. Tiaong</text>
+
+                  <!-- 9. Candelaria -->
+                  <circle cx="605" cy="412" r="4" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.5" />
+                  <text x="605" y="429" text-anchor="middle">9. Candelaria</text>
+
+                  <!-- 10. Lutucan -->
+                  <circle cx="692" cy="428" r="3" fill="#475569" stroke="#FFFFFF" stroke-width="1" />
+                  <text x="692" y="443" text-anchor="middle" font-size="9.5" fill="#475569">10. Lutucan</text>
+
+                  <!-- 11. Sariaya -->
+                  <circle cx="768" cy="448" r="4" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.5" />
+                  <text x="768" y="465" text-anchor="middle">11. Sariaya</text>
+
+                  <!-- 12. Lucena -->
+                  <circle cx="882" cy="482" r="5" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="1.8" />
+                  <text x="892" y="486" text-anchor="start" font-weight="700">12. Lucena</text>
+                </g>
+
+                <!-- SCALE BAR -->
+                <g transform="translate(24, 588)">
+                  <line x1="0" y1="0" x2="100" y2="0" stroke="#475569" stroke-width="2" />
+                  <line x1="0" y1="-4" x2="0" y2="4" stroke="#475569" stroke-width="2" />
+                  <line x1="100" y1="-4" x2="100" y2="4" stroke="#475569" stroke-width="2" />
+                  <text x="50" y="-6" text-anchor="middle" fill="#475569" font-size="9.5" font-weight="600">~10 km (90 km Corridor)</text>
+                </g>
+              </svg>
+
+              <!-- Dynamic Layers Mounted Over Map -->
+              <div id="hotspotLayer" class="absolute inset-0 pointer-events-none"></div>
+              <div id="pinsLayer" class="absolute inset-0"></div>
+
+              <!-- Animated Locomotive Marker -->
+              <div id="trainMarker" class="train-marker hidden">
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-900 text-white text-[10px] font-mono font-semibold shadow-md border border-slate-700 whitespace-nowrap">
+                  <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                  <span id="trainMarkerLabel">PNR IPC-04 • 54 km/h</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Compact Legend Footer -->
+          <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> CLEAR</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> PRE_ALERT</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-600"></span> GATE_LOWERED</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-pnr-700"></span> POST_PASS_HOLD (5s)</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span> FAULT</span>
+            </div>
+            <span class="text-slate-400">Scroll wheel to zoom • Drag background to pan</span>
+          </div>
+        </section>
+
+        <!-- BANTAY HOTSPOT & QR INCIDENT MODULE -->
+        <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900">Bantay Hotspot &amp; QR Incident Log</h2>
+              <p class="text-xs text-slate-500">RA 10173 Anonymized Stoning (Pambabato) &amp; Track Debris Reports</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnTriggerAudioWarn" type="button" class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition">
+                Test Tagalog Audio Warning
+              </button>
+              <button id="btnOpenQrModal" type="button" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition">
+                + Submit QR Report
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <th class="py-2.5 px-3.5">ID / Time</th>
+                  <th class="py-2.5 px-3.5">Sector &amp; Type</th>
+                  <th class="py-2.5 px-3.5">Field Message</th>
+                  <th class="py-2.5 px-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="incidentTableBody" class="divide-y divide-slate-100 text-xs"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- RIGHT COLUMN (5 COLS): INSPECTOR, MARSHALS, LOGS & DATABASE -->
+      <div class="lg:col-span-5 space-y-5">
+
+        <!-- CARD 1: CROSSING SELECTOR & GATE CONTROL -->
+        <section class="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
+              <button id="tabNode1" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-white text-slate-900 shadow-sm transition">
+                Spot 1 (North)
+              </button>
+              <button id="tabNode2" type="button" class="px-3 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 transition">
+                Spot 2 (South)
+              </button>
+            </div>
+            <span id="inspectorStatusBadge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              CLEAR
+            </span>
+          </div>
+
+          <div>
+            <h3 id="inspectorNodeTitle" class="text-sm font-semibold text-slate-900">Bantay Post 01 — Brgy. San Nicolas (North)</h3>
+            <p id="inspectorNodeCoords" class="text-xs text-slate-500 font-mono mt-0.5">14.0792° N, 121.3185° E • KM 87.4 PNR IPC</p>
+          </div>
+
+          <!-- Dual Drop-Arm Barrier Visual + 5s Hold Progress -->
+          <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-medium text-slate-700">Dual 3.5m Fiberglass Drop Arms</span>
+              <span id="gateStateText" class="font-mono font-semibold text-emerald-700">UPRIGHT (OPEN)</span>
+            </div>
+            <div class="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+              <div id="gateHoldBar" class="h-full bg-pnr-700 transition-all duration-100" style="width: 0%"></div>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-slate-500">
+              <span>Staggered 3s Exit Delay + Overcurrent Auto-Reverse</span>
+              <span id="etaCountdownText" class="font-mono font-medium text-slate-700">ETA: --</span>
+            </div>
+          </div>
+
+          <!-- Manual Control & Shadow Mode -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <label class="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+              <input id="shadowModeToggle" type="checkbox" class="rounded border-slate-300 text-pnr-700 focus:ring-pnr-600" />
+              <span>Phase 3 Shadow Mode (Gates Upright)</span>
+            </label>
+            <div class="flex items-center gap-1.5">
+              <button id="btnForceClear" type="button" class="px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
+                Reset CLEAR
+              </button>
+              <button id="btnTriggerFault" type="button" class="px-2.5 py-1 rounded text-xs font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200">
+                Test Fault
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- CARD 2: 2-OF-3 SENSOR FUSION & HARDWARE HEALTH -->
+        <section class="bg-white border border-slate-200 rounded-xl p-4 space-y-3.5">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-slate-900">2-of-3 Multi-Sensor Fusion &amp; Health</h3>
+            <span id="fusionVoteSummary" class="text-xs font-mono font-semibold text-slate-600">0 / 3 Votes</span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div id="sensorCamCard" class="p-2.5 rounded-lg border border-slate-200 bg-slate-50">
+              <div class="text-[10px] font-semibold uppercase text-slate-500">AI Vision</div>
+              <div id="sensorCamVal" class="mt-1 font-mono font-semibold text-slate-700">IDLE</div>
+            </div>
+            <div id="sensorVibCard" class="p-2.5 rounded-lg border border-slate-200 bg-slate-50">
+              <div class="text-[10px] font-semibold uppercase text-slate-500">Piezo Vib</div>
+              <div id="sensorVibVal" class="mt-1 font-mono font-semibold text-slate-700">IDLE</div>
+            </div>
+            <div id="sensorRadCard" class="p-2.5 rounded-lg border border-slate-200 bg-slate-50">
+              <div class="text-[10px] font-semibold uppercase text-slate-500">24GHz Radar</div>
+              <div id="sensorRadVal" class="mt-1 font-mono font-semibold text-slate-700">0 km/h</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 pt-1 border-t border-slate-100 text-xs">
+            <div>
+              <span class="text-[11px] text-slate-500 block">12V LiFePO4</span>
+              <span id="healthBattery" class="font-mono font-semibold text-slate-900">13.3 V</span>
+            </div>
+            <div>
+              <span class="text-[11px] text-slate-500 block">100W Solar</span>
+              <span id="healthSolar" class="font-mono font-semibold text-emerald-700">68 W Charging</span>
+            </div>
+            <div>
+              <span class="text-[11px] text-slate-500 block">IP65 Enclosure</span>
+              <span id="healthTamper" class="font-mono font-semibold text-slate-900">SEALED</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- CARD 3: RILES MARSHAL SMS DISPATCH & 2-MIN TRACKER -->
+        <section class="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Riles Marshal SMS Dispatch</h3>
+              <p class="text-[11px] text-slate-500">Automated BDRRMC Alert • 2-Minute Target Window</p>
+            </div>
+            <span id="marshalTimerBadge" class="px-2 py-0.5 rounded font-mono text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+              STANDBY
+            </span>
+          </div>
+
+          <div id="marshalCardBody" class="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 text-xs">
+            <div>
+              <div id="marshalName" class="font-semibold text-slate-900">R. Manalo (BDRRMC San Nicolas)</div>
+              <div id="marshalPhone" class="font-mono text-[11px] text-slate-500">+63 917 555 0142 • Shift 06:00–18:00</div>
+            </div>
+            <button id="btnMarshalCheckIn" type="button" class="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition shrink-0">
+              Marshal Check-In
+            </button>
+          </div>
+        </section>
+
+        <!-- CARD 4: LIVE TELEMETRY EVENT LOG -->
+        <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="text-xs font-semibold text-slate-900 uppercase tracking-wider">Live Telemetry Event Log</h3>
+            <button id="btnClearLog" type="button" class="text-[11px] text-slate-500 hover:text-slate-800">Clear</button>
+          </div>
+          <div id="eventLogList" class="max-h-44 overflow-y-auto divide-y divide-slate-100 text-xs font-mono"></div>
+        </section>
+
+        <!-- CARD 5: RELATIONAL DATABASE & GSM JSON INSPECTOR -->
+        <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Database &amp; GSM JSON Telemetry</h3>
+              <p class="text-[11px] text-slate-500">PostgreSQL Schema &amp; ~210-Byte SIM800L Packet</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button id="btnOpenGsmModal" type="button" class="px-2.5 py-1 rounded text-xs font-medium bg-pnr-50 text-pnr-700 border border-pnr-100 hover:bg-pnr-100">
+                Simulate GSM Packet
+              </button>
+              <button id="btnCopyJson" type="button" class="px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200">
+                Copy JSON
+              </button>
+            </div>
+          </div>
+
+          <!-- Compact JSON Payload Preview -->
+          <div class="p-3 bg-slate-900 text-emerald-400 font-mono text-[11px] overflow-x-auto">
+            <pre id="gsmJsonPreview" class="leading-relaxed"></pre>
+          </div>
+
+          <!-- DB Table Tabs -->
+          <div class="px-3 pt-2 border-t border-slate-200 bg-slate-50 flex items-center gap-1 overflow-x-auto text-[11px]">
+            <button data-db-tab="crossing_nodes" class="db-tab-btn px-2.5 py-1.5 rounded-t font-mono font-semibold bg-white text-pnr-700 border border-b-0 border-slate-200">crossing_nodes</button>
+            <button data-db-tab="sensor_telemetry_logs" class="db-tab-btn px-2.5 py-1.5 rounded-t font-mono text-slate-600 hover:text-slate-900">sensor_telemetry</button>
+            <button data-db-tab="sms_dispatch_logs" class="db-tab-btn px-2.5 py-1.5 rounded-t font-mono text-slate-600 hover:text-slate-900">sms_dispatch</button>
+          </div>
+          <div id="dbTableContainer" class="p-3 overflow-x-auto text-[11px] font-mono"></div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL 1: SYSTEM GUIDE -->
+  <div id="guideModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl border border-slate-200 max-w-2xl w-full max-h-[85vh] flex flex-col shadow-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Bantay Map Prototype — System Guide</h3>
+          <p class="text-xs text-slate-500">Operational Reference for Project BantayRiles Dashboard</p>
+        </div>
+        <button data-close-modal="guideModal" type="button" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">&times;</button>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-4 text-xs text-slate-700 leading-relaxed">
+        <div>
+          <h4 class="font-semibold text-slate-900 text-sm mb-1.5">1. Map Symbols &amp; Operational Statuses</h4>
+          <ul class="space-y-1.5 list-disc pl-4">
+            <li><strong>CLEAR (Green):</strong> Track is clear; dual 3.5m fiberglass drop arms are upright.</li>
+            <li><strong>PRE_ALERT (Amber):</strong> 2-of-3 sensors confirmed an approaching train; ≤3 Hz LED strobes and 90 dB chimes activate 5–7s before gate descent.</li>
+            <li><strong>GATE_LOWERED (Red):</strong> Entrance drop arm lowers first, followed 3s later by exit arm (25s before train arrival).</li>
+            <li><strong>POST_PASS_HOLD (Blue):</strong> Safety buffer keeping gates closed for <strong>5.0 full seconds</strong> after the train clears the crossing before reopening.</li>
+            <li><strong>FAULT (Purple):</strong> Hardware tamper switch, low battery, or gate overcurrent obstruction alert.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-slate-900 text-sm mb-1.5">2. Map Controls &amp; Simulation Buttons</h4>
+          <ul class="space-y-1.5 list-disc pl-4">
+            <li><strong>Simulate Corridor Run (Spot 1 → Spot 2):</strong> Spawns an animated PNR locomotive along the georeferenced Laguna–Quezon railway line, testing Spot 1 and Spot 2 sequentially with the 5.0-second post-pass hold.</li>
+            <li><strong>Map Zoom &amp; Pan Controls (+, −, 100%):</strong> Zoom into the San Pablo Pilot Sector up to 260% using buttons or mouse scroll wheel, and drag the map background to pan.</li>
+            <li><strong>Hotspots (ON/OFF):</strong> Toggles crimson (<em>pambabato</em> stone-throwing) and amber (track debris) heat zones submitted via QR codes.</li>
+            <li><strong>Align Pins (ON/OFF):</strong> Unlocks Spot 1 and Spot 2 pins so you can drag them along the track line.</li>
+            <li><strong>Developer Menu:</strong> Opens state checkpoint snapshots, Rollback restore, and Custom Map Image upload tools.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-slate-900 text-sm mb-1.5">3. Dashboard Workflow &amp; Compliance</h4>
+          <ul class="space-y-1.5 list-disc pl-4">
+            <li><strong>2-of-3 Sensor Fusion:</strong> Requires agreement between at least 2 sensors (AI Vision, Piezo Vibration, or 24GHz Doppler Radar) to eliminate false triggers from parallel road traffic.</li>
+            <li><strong>Riles Marshal Dispatch:</strong> Tracks the 2-minute (120s) target window for barangay marshals to secure crossings after automated SMS dispatch.</li>
+            <li><strong>RA 10173 &amp; RA 9710 Compliance:</strong> QR incident logs store anonymized coordinates and hazard notes without personal commuter surveillance.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: SUBMIT QR INCIDENT REPORT -->
+  <div id="qrReportModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl border border-slate-200 max-w-md w-full shadow-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-slate-900">Submit QR Trackside Hazard Report</h3>
+        <button data-close-modal="qrReportModal" type="button" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">&times;</button>
+      </div>
+      <form id="qrReportForm" class="p-5 space-y-3.5 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Nearest Sector / Crossing</label>
+          <select id="qrSectorSelect" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs">
+            <option value="BP-01">Spot 1 — Brgy. San Nicolas (San Pablo North)</option>
+            <option value="BP-02">Spot 2 — Brgy. San Rafael (San Pablo South)</option>
+            <option value="TIAONG_MID">Mid-Sector — San Pablo–Tiaong Boundary</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Hazard Category</label>
+            <select id="qrTypeSelect" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs">
+              <option value="STONING">Stone-Throwing (Pambabato)</option>
+              <option value="DEBRIS">Illegal Track Debris / Waste</option>
+              <option value="TRESPASSING">Track Trespassing</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Reporter Role</label>
+            <select id="qrRoleSelect" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs">
+              <option value="PNR Train Crew">PNR Train Crew</option>
+              <option value="BDRRMC Official">BDRRMC Official</option>
+              <option value="Riles Marshal">Riles Marshal</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Incident Details (Anonymized per RA 10173)</label>
+          <textarea id="qrNotesInput" rows="3" required placeholder="Describe stone-throwing direction, track obstruction, or patrol needed..." class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button data-close-modal="qrReportModal" type="button" class="px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 rounded-md bg-pnr-700 text-white font-semibold hover:bg-pnr-800">Log Hotspot Report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 3: VIEW INCIDENT REPORT MESSAGE -->
+  <div id="viewReportModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl border border-slate-200 max-w-md w-full shadow-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+        <h3 id="viewReportTitle" class="text-sm font-semibold text-slate-900">Incident Report Details</h3>
+        <button data-close-modal="viewReportModal" type="button" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">&times;</button>
+      </div>
+      <div class="p-5 space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
+          <div><span class="text-slate-500 block">Hazard Type</span><strong id="viewReportType" class="text-slate-900"></strong></div>
+          <div><span class="text-slate-500 block">Reporter Role</span><strong id="viewReportRole" class="text-slate-900"></strong></div>
+          <div><span class="text-slate-500 block">Timestamp</span><span id="viewReportTime" class="font-mono text-slate-800"></span></div>
+          <div><span class="text-slate-500 block">Map Position</span><span id="viewReportCoords" class="font-mono text-slate-800"></span></div>
+        </div>
+        <div>
+          <span class="text-slate-500 font-medium block mb-1">Full Field Message:</span>
+          <p id="viewReportMessage" class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 leading-relaxed whitespace-pre-wrap"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: SIMULATE INCOMING GSM JSON PACKET -->
+  <div id="gsmPacketModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl border border-slate-200 max-w-lg w-full shadow-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900">Simulate Incoming GSM Gateway Packet</h3>
+          <p class="text-[11px] text-slate-500">Test POST /api/telemetry ingestion from ESP32 + SIM800L</p>
+        </div>
+        <button data-close-modal="gsmPacketModal" type="button" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">&times;</button>
+      </div>
+      <div class="p-5 space-y-3 text-xs">
+        <div class="flex flex-wrap gap-1.5">
+          <button type="button" data-gsm-preset="PRE_ALERT_1" class="gsm-preset-btn px-2.5 py-1 rounded bg-amber-50 text-amber-800 border border-amber-200 font-medium">Spot 1 Pre-Alert</button>
+          <button type="button" data-gsm-preset="GATE_2" class="gsm-preset-btn px-2.5 py-1 rounded bg-rose-50 text-rose-800 border border-rose-200 font-medium">Spot 2 Gate Lowered</button>
+          <button type="button" data-gsm-preset="FAULT_1" class="gsm-preset-btn px-2.5 py-1 rounded bg-purple-50 text-purple-800 border border-purple-200 font-medium">Tamper / Fault</button>
+          <button type="button" data-gsm-preset="CLEAR_ALL" class="gsm-preset-btn px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">Heartbeat CLEAR</button>
+        </div>
+        <textarea id="gsmPayloadEditor" rows="9" class="w-full rounded-lg bg-slate-900 text-emerald-400 font-mono text-xs p-3 focus:outline-none"></textarea>
+        <div class="flex justify-end gap-2">
+          <button data-close-modal="gsmPacketModal" type="button" class="px-3 py-1.5 rounded-md border border-slate-300 text-slate-700">Cancel</button>
+          <button id="btnSendGsmPacket" type="button" class="px-4 py-1.5 rounded-md bg-pnr-700 text-white font-semibold hover:bg-pnr-800">Ingest Packet</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
