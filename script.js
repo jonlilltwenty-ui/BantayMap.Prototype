@@ -224,7 +224,7 @@
       { time: '08:15:10', tag: 'SYNC', text: 'GSM heartbeat received from BP-01 & BP-02 (13.3V / 13.2V).' },
       { time: '06:00:05', tag: 'SMS', text: 'Morning shift schedule synced to Riles Marshals R. Manalo & J. Reyes.' }
     ],
-    activeMarshalAlert: null
+    marshalAlertsByNode: {}
   };
 
   function deepClone(obj) {
@@ -658,17 +658,40 @@
     }
   }
 
-  // Riles Marshal SMS Dispatch & 2-Minute Countdown
+  // Riles Marshal SMS Dispatch & 2-Minute Per-Node Countdown
+  function getMarshalAlertForNode(nodeId) {
+    if (!appState.marshalAlertsByNode) appState.marshalAlertsByNode = {};
+    return appState.marshalAlertsByNode[nodeId] || null;
+  }
+
+  function updateMarshalComplianceKpi() {
+    const kpiEl = document.getElementById('kpiMarshalRate');
+    if (!kpiEl) return;
+    const completed = appState.smsLogs.filter((s) => s.status === 'ACKNOWLEDGED' || s.status === 'OVERDUE');
+    if (!completed.length) {
+      kpiEl.textContent = '100%';
+      return;
+    }
+    const onTime = completed.filter((s) => s.status === 'ACKNOWLEDGED' && (s.ackSec == null || s.ackSec <= 120)).length;
+    kpiEl.textContent = `${Math.round((onTime / completed.length) * 100)}%`;
+  }
+
   function triggerMarshalSmsDispatch(node, category) {
+    if (!appState.marshalAlertsByNode) appState.marshalAlertsByNode = {};
+    const existing = appState.marshalAlertsByNode[node.id];
+    if (existing && !existing.acknowledged && existing.remainingSec > 0) return;
+
     const marshalShort = node.marshal.name.split(' (')[0];
-    appState.activeMarshalAlert = {
+    const smsId = 'SMS-' + (42 + appState.smsLogs.length);
+    appState.marshalAlertsByNode[node.id] = {
+      smsId,
       nodeId: node.id,
       marshal: marshalShort,
       remainingSec: 120,
       acknowledged: false
     };
     appState.smsLogs.unshift({
-      id: 'SMS-' + (42 + appState.smsLogs.length),
+      id: smsId,
       nodeId: node.id,
       marshal: marshalShort,
       category,
@@ -676,29 +699,36 @@
       ackSec: null,
       status: 'DISPATCHED'
     });
-    appendLog('SMS', `Dispatched ${category} alert to ${marshalShort} (${node.marshal.phone}).`);
+    appendLog('SMS', `Dispatched ${category} alert to ${marshalShort} (${node.marshal.phone}) — 02:00 timer started.`);
     updateMarshalBadge();
   }
 
   function updateMarshalBadge() {
     const badge = document.getElementById('marshalTimerBadge');
-    if (!appState.activeMarshalAlert) {
+    if (!badge) return;
+    const alert = getMarshalAlertForNode(appState.selectedNodeId);
+    if (!alert) {
       badge.textContent = 'STANDBY';
       badge.className = 'px-2 py-0.5 rounded font-mono text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200';
       return;
     }
-    if (appState.activeMarshalAlert.acknowledged) {
-      badge.textContent = 'SECURED ≤2m';
+    if (alert.acknowledged) {
+      badge.textContent = `SECURED (${alert.ackSec ?? 0}s)`;
       badge.className = 'px-2 py-0.5 rounded font-mono text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
       return;
     }
-    const mins = String(Math.floor(appState.activeMarshalAlert.remainingSec / 60)).padStart(2, '0');
-    const secs = String(appState.activeMarshalAlert.remainingSec % 60).padStart(2, '0');
+    if (alert.remainingSec <= 0) {
+      badge.textContent = 'OVERDUE 00:00';
+      badge.className = 'px-2 py-0.5 rounded font-mono text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200';
+      return;
+    }
+    const mins = String(Math.floor(alert.remainingSec / 60)).padStart(2, '0');
+    const secs = String(alert.remainingSec % 60).padStart(2, '0');
     badge.textContent = `DUE ${mins}:${secs}`;
     badge.className = 'px-2 py-0.5 rounded font-mono text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200';
   }
 
-  // 5.0-Second Post-Pass Gate Hold Timer
+  // 5.0-Second Post-Pass Gate Hold Timer (Wall-Clock Accurate)
   function startPostPassHold(node) {
     if (simController.holdTimers[node.id]) {
       clearInterval(simController.holdTimers[node.id]);
@@ -707,16 +737,24 @@
     node.holdRemainingSec = 5.0;
     node.etaSec = null;
     node.sensors = { cam: false, vib: false, radarKmh: 0 };
+    const holdStartMs = performance.now();
     appendLog('HOLD', `${node.shortName} train cleared — holding gates closed for 5.0s safety buffer.`);
     renderAll();
 
     simController.holdTimers[node.id] = setInterval(() => {
-      node.holdRemainingSec = Math.max(0, Number((node.holdRemainingSec - 0.1).toFixed(1)));
-      if (node.holdRemainingSec <= 0) {
+      const elapsedSec = (performance.now() - holdStartMs) / 1000;
+      const remaining = Math.max(0, Number((5.0 - elapsedSec).toFixed(1)));
+      node.holdRemainingSec = remaining;
+      if (remaining <= 0) {
         clearInterval(simController.holdTimers[node.id]);
         delete simController.holdTimers[node.id];
         node.status = 'CLEAR';
         appendLog('CLEAR', `${node.shortName} 5.0s buffer complete — dual drop arms raised.`);
+        // If another node is currently active ahead, focus it once this hold finishes
+        const nextActive = appState.nodes.find((n) => n.status !== 'CLEAR');
+        if (nextActive) {
+          appState.selectedNodeId = nextActive.id;
+        }
       }
       renderMapOverlays();
       renderInspector();
@@ -724,9 +762,22 @@
     }, 100);
   }
 
-  // Corridor Train Simulation (Spot 1 -> Spot 2 along georeferenced track)
+  function setSimButtonState(isRunning) {
+    const btn = document.getElementById('btnSimulateCorridor');
+    if (!btn) return;
+    if (isRunning) {
+      btn.textContent = 'Running Simulation...';
+      btn.classList.add('opacity-80', 'cursor-wait');
+    } else {
+      btn.textContent = 'Simulate Corridor Run (Spot 1 → Spot 2)';
+      btn.classList.remove('opacity-80', 'cursor-wait');
+    }
+  }
+
+  // Corridor Train Simulation (Los Baños -> Spot 1 -> Spot 2 along blue PNR track)
   function stopSimulation() {
     simController.running = false;
+    setSimButtonState(false);
     if (simController.rafId) cancelAnimationFrame(simController.rafId);
     Object.keys(simController.holdTimers).forEach((k) => {
       clearInterval(simController.holdTimers[k]);
@@ -740,8 +791,23 @@
 
   function runCorridorSimulation() {
     if (simController.running) return;
-    simController.running = true;
+    // Reset any lingering node states before starting a clean corridor run
+    appState.nodes.forEach((n) => {
+      if (simController.holdTimers[n.id]) {
+        clearInterval(simController.holdTimers[n.id]);
+        delete simController.holdTimers[n.id];
+      }
+      n.status = 'CLEAR';
+      n.etaSec = null;
+      n.holdRemainingSec = 0;
+      n.tamperAlert = false;
+      n.sensors = { cam: false, vib: false, radarKmh: 0 };
+    });
 
+    simController.running = true;
+    setSimButtonState(true);
+
+    const TRAIN_SPEED = 5.5; // SVG path units per second
     const sortedNodes = [...appState.nodes]
       .map((n) => ({ node: n, trackDist: snapToTrack(n.xPct, n.yPct).distAlong }))
       .sort((a, b) => a.trackDist - b.trackDist);
@@ -758,6 +824,7 @@
     marker.classList.remove('hidden');
     if (svgTrain) svgTrain.classList.remove('hidden');
 
+    appState.selectedNodeId = sortedNodes[0].node.id;
     appendLog('TRAIN', 'PNR IPC-04 departed Los Baños Station southbound along the blue PNR line (54 km/h).');
 
     let currentDist = startDist;
@@ -765,9 +832,9 @@
 
     function step(now) {
       if (!simController.running) return;
-      const dt = (now - lastTs) / 1000;
+      const dt = Math.min(0.1, (now - lastTs) / 1000);
       lastTs = now;
-      currentDist += 5.5 * dt; // Smooth, slow progression in SVG path units/sec
+      currentDist += TRAIN_SPEED * dt;
 
       const pos = pointAtDistance(currentDist);
       marker.style.left = pos.x + '%';
@@ -776,35 +843,42 @@
         svgTrain.setAttribute('transform', `translate(${pos.svgX.toFixed(2)}, ${pos.svgY.toFixed(2)}) rotate(${pos.angleDeg.toFixed(1)})`);
       }
 
+      const anyHolding = appState.nodes.some((n) => n.status === 'POST_PASS_HOLD');
+
       sortedNodes.forEach(({ node, trackDist }) => {
         if (passedSet.has(node.id)) return;
         const delta = trackDist - currentDist;
 
-        if (delta <= 85 && delta > 45 && node.status === 'CLEAR') {
-          node.status = 'PRE_ALERT';
-          node.etaSec = 28;
-          node.sensors = { cam: true, vib: false, radarKmh: 54 };
-          appState.selectedNodeId = node.id;
-          appState.telemetryLogs.unshift({
-            id: 'TL-' + (903 + appState.telemetryLogs.length),
-            nodeId: node.id,
-            time: nowTimeStr(),
-            cam: 1,
-            vib: 0,
-            radar: 1,
-            speed: 54,
-            action: '2_OF_3_PRE_ALERT'
-          });
-          triggerMarshalSmsDispatch(node, 'APPROACH_PRE_ALERT');
-          appendLog('ALERT', `${node.shortName} 2-of-3 fusion locked (AI Vision + Radar) — PRE_ALERT.`);
-        } else if (delta <= 45 && delta > 0 && (node.status === 'PRE_ALERT' || node.status === 'CLEAR')) {
-          node.status = 'GATE_LOWERED';
-          node.etaSec = Math.max(1, Math.round(delta / 2));
-          node.sensors = { cam: true, vib: true, radarKmh: 54 };
-          appState.selectedNodeId = node.id;
-          appendLog('GATE', `${node.shortName} drop arms lowered (staggered 3s delay, 25s window).`);
+        if (delta <= 85 && delta > 45) {
+          if (node.status === 'CLEAR') {
+            node.status = 'PRE_ALERT';
+            node.sensors = { cam: true, vib: false, radarKmh: 54 };
+            if (!anyHolding) appState.selectedNodeId = node.id;
+            appState.telemetryLogs.unshift({
+              id: 'TL-' + (903 + appState.telemetryLogs.length),
+              nodeId: node.id,
+              time: nowTimeStr(),
+              cam: 1,
+              vib: 0,
+              radar: 1,
+              speed: 54,
+              action: '2_OF_3_PRE_ALERT'
+            });
+            triggerMarshalSmsDispatch(node, 'APPROACH_PRE_ALERT');
+            appendLog('ALERT', `${node.shortName} 2-of-3 fusion locked (AI Vision + Radar) — PRE_ALERT.`);
+          }
+          node.etaSec = Math.max(1, Math.ceil(delta / TRAIN_SPEED));
+        } else if (delta <= 45 && delta > 0) {
+          if (node.status === 'PRE_ALERT' || node.status === 'CLEAR') {
+            node.status = 'GATE_LOWERED';
+            node.sensors = { cam: true, vib: true, radarKmh: 54 };
+            if (!anyHolding) appState.selectedNodeId = node.id;
+            appendLog('GATE', `${node.shortName} drop arms lowered (staggered 3s delay, 25s window).`);
+          }
+          node.etaSec = Math.max(1, Math.ceil(delta / TRAIN_SPEED));
         } else if (delta <= 0) {
           passedSet.add(node.id);
+          appState.selectedNodeId = node.id;
           startPostPassHold(node);
         }
       });
@@ -817,6 +891,7 @@
         simController.rafId = requestAnimationFrame(step);
       } else {
         simController.running = false;
+        setSimButtonState(false);
         marker.classList.add('hidden');
         if (svgTrain) svgTrain.classList.add('hidden');
         appendLog('TRAIN', 'PNR IPC-04 cleared San Pablo Pilot Sector southbound toward Tiaong.');
@@ -929,38 +1004,65 @@
         n.tamperAlert = false;
         n.sensors = { cam: false, vib: false, radarKmh: 0 };
       });
-      appendLog('RESET', 'All crossings reset to CLEAR.');
+      appState.marshalAlertsByNode = {};
+      appendLog('RESET', 'All crossings and timers reset to CLEAR / STANDBY.');
       renderAll();
     });
     document.getElementById('btnTriggerFault').addEventListener('click', () => {
       const node = appState.nodes.find((n) => n.id === appState.selectedNodeId);
       if (!node) return;
       node.status = 'FAULT';
+      node.etaSec = null;
       node.tamperAlert = true;
       triggerMarshalSmsDispatch(node, 'HARDWARE_FAULT');
       appendLog('FAULT', `${node.shortName} IP65 enclosure tamper / fault triggered.`);
       renderAll();
     });
 
-    // Tagalog Audio Deterrence Test
+    // Tagalog Audio Deterrence Test (with subtle Web Audio warning chime)
     document.getElementById('btnTriggerAudioWarn').addEventListener('click', () => {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.setValueAtTime(660, ctx.currentTime + 0.16);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.36);
+        }
+      } catch (e) {}
       appendLog('AUDIO', 'Directional 88dB speaker fired: "Bawal batuhin ang tren, nakamamatay!"');
     });
 
     // Marshal Check-In
     document.getElementById('btnMarshalCheckIn').addEventListener('click', () => {
-      if (!appState.activeMarshalAlert) {
+      const alert = getMarshalAlertForNode(appState.selectedNodeId);
+      if (!alert) {
         appendLog('MARSHAL', 'On-duty Riles Marshal verified active on shift.');
         return;
       }
-      appState.activeMarshalAlert.acknowledged = true;
-      const elapsed = 120 - appState.activeMarshalAlert.remainingSec;
-      if (appState.smsLogs[0]) {
-        appState.smsLogs[0].status = 'ACKNOWLEDGED';
-        appState.smsLogs[0].ackSec = elapsed;
+      if (alert.acknowledged) {
+        appendLog('MARSHAL', `${alert.marshal} already checked in for ${alert.nodeId}.`);
+        return;
       }
-      appendLog('MARSHAL', `${appState.activeMarshalAlert.marshal} secured crossing in ${elapsed}s (≤ 2m target).`);
+      alert.acknowledged = true;
+      const elapsed = Math.max(1, 120 - alert.remainingSec);
+      alert.ackSec = elapsed;
+      const logEntry = appState.smsLogs.find((s) => s.id === alert.smsId) || appState.smsLogs.find((s) => s.nodeId === alert.nodeId && s.status === 'DISPATCHED');
+      if (logEntry) {
+        logEntry.status = 'ACKNOWLEDGED';
+        logEntry.ackSec = elapsed;
+      }
+      appendLog('MARSHAL', `${alert.marshal} secured ${alert.nodeId} in ${elapsed}s (≤ 2m target).`);
       updateMarshalBadge();
+      updateMarshalComplianceKpi();
       renderDatabaseAndJson();
     });
 
@@ -1113,19 +1215,63 @@
     });
   }
 
-  // Live Clock & Marshal Countdown Interval
-  setInterval(() => {
+  // Live Clock, Marshal 2-Min Countdown, and Standalone GSM ETA Countdown Tick
+  function tickClockAndTimers() {
     const clock = document.getElementById('liveClock');
     if (clock) clock.textContent = `${nowTimeStr()} PST`;
-    if (appState.activeMarshalAlert && !appState.activeMarshalAlert.acknowledged && appState.activeMarshalAlert.remainingSec > 0) {
-      appState.activeMarshalAlert.remainingSec -= 1;
+
+    let marshalUpdated = false;
+    if (appState.marshalAlertsByNode) {
+      Object.values(appState.marshalAlertsByNode).forEach((alert) => {
+        if (!alert.acknowledged && alert.remainingSec > 0) {
+          alert.remainingSec -= 1;
+          marshalUpdated = true;
+          if (alert.remainingSec === 0) {
+            const logEntry = appState.smsLogs.find((s) => s.id === alert.smsId);
+            if (logEntry && logEntry.status === 'DISPATCHED') {
+              logEntry.status = 'OVERDUE';
+            }
+            appendLog('OVERDUE', `${alert.marshal} exceeded 02:00 marshal check-in target at ${alert.nodeId}.`);
+            updateMarshalComplianceKpi();
+            renderDatabaseAndJson();
+          }
+        }
+      });
+    }
+    if (marshalUpdated) {
       updateMarshalBadge();
     }
-  }, 1000);
+
+    // When corridor train animation isn't driving ETA, tick down GSM-injected ETA countdowns
+    if (!simController.running) {
+      let etaUpdated = false;
+      appState.nodes.forEach((node) => {
+        if ((node.status === 'PRE_ALERT' || node.status === 'GATE_LOWERED') && typeof node.etaSec === 'number' && node.etaSec > 0) {
+          node.etaSec -= 1;
+          etaUpdated = true;
+          if (node.status === 'PRE_ALERT' && node.etaSec <= 15 && node.etaSec > 0) {
+            node.status = 'GATE_LOWERED';
+            node.sensors.vib = true;
+            appendLog('GATE', `${node.shortName} drop arms lowered (ETA ${node.etaSec}s).`);
+          } else if (node.etaSec <= 0) {
+            startPostPassHold(node);
+          }
+        }
+      });
+      if (etaUpdated) {
+        renderMapOverlays();
+        renderInspector();
+        renderDatabaseAndJson();
+      }
+    }
+  }
+
+  setInterval(tickClockAndTimers, 1000);
 
   // Boot
   RollbackEngine.init();
   initZoomPan();
   bindEvents();
+  tickClockAndTimers();
   renderAll();
 })();
