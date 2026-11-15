@@ -42,13 +42,18 @@
     for (const seg of TRACK_METRICS.segs) {
       if (clamped <= seg.startDist + seg.len) {
         const t = seg.len === 0 ? 0 : (clamped - seg.startDist) / seg.len;
+        const dxSvg = (seg.b.x - seg.a.x) * 10;
+        const dySvg = (seg.b.y - seg.a.y) * 6.25;
+        const angleDeg = (Math.atan2(dySvg, dxSvg) * 180) / Math.PI;
         return {
           x: seg.a.x + (seg.b.x - seg.a.x) * t,
-          y: seg.a.y + (seg.b.y - seg.a.y) * t
+          y: seg.a.y + (seg.b.y - seg.a.y) * t,
+          angleDeg
         };
       }
     }
-    return TRACK_WAYPOINTS[TRACK_WAYPOINTS.length - 1];
+    const last = TRACK_WAYPOINTS[TRACK_WAYPOINTS.length - 1];
+    return { x: last.x, y: last.y, angleDeg: 18 };
   }
 
   function snapToTrack(px, py) {
@@ -669,6 +674,8 @@
     });
     const marker = document.getElementById('trainMarker');
     if (marker) marker.classList.add('hidden');
+    const svgTrain = document.getElementById('svgTrainGroup');
+    if (svgTrain) svgTrain.classList.add('hidden');
   }
 
   function runCorridorSimulation() {
@@ -686,7 +693,9 @@
 
     const passedSet = new Set();
     const marker = document.getElementById('trainMarker');
+    const svgTrain = document.getElementById('svgTrainGroup');
     marker.classList.remove('hidden');
+    if (svgTrain) svgTrain.classList.remove('hidden');
 
     appendLog('TRAIN', 'PNR IPC-04 departed Los Baños Station southbound toward San Pablo Pilot Crossings (54 km/h).');
 
@@ -702,6 +711,11 @@
       const pos = pointAtDistance(currentDist);
       marker.style.left = pos.x + '%';
       marker.style.top = pos.y + '%';
+      if (svgTrain) {
+        const svgX = (pos.x * 10).toFixed(2);
+        const svgY = (pos.y * 6.25).toFixed(2);
+        svgTrain.setAttribute('transform', `translate(${svgX}, ${svgY}) rotate(${pos.angleDeg.toFixed(1)})`);
+      }
 
       sortedNodes.forEach(({ node, trackDist }) => {
         if (passedSet.has(node.id)) return;
@@ -745,6 +759,7 @@
       } else {
         simController.running = false;
         marker.classList.add('hidden');
+        if (svgTrain) svgTrain.classList.add('hidden');
         appendLog('TRAIN', 'PNR IPC-04 cleared San Pablo Pilot Sector southbound toward Tiaong.');
       }
     }
