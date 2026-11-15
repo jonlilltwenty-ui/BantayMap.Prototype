@@ -697,7 +697,7 @@
       if (!simController.running) return;
       const dt = (now - lastTs) / 1000;
       lastTs = now;
-      currentDist += 3.6 * dt;
+      currentDist += 1.35 * dt;
 
       const pos = pointAtDistance(currentDist);
       marker.style.left = pos.x + '%';
@@ -707,7 +707,7 @@
         if (passedSet.has(node.id)) return;
         const delta = trackDist - currentDist;
 
-        if (delta <= 10 && delta > 5.5 && node.status === 'CLEAR') {
+        if (delta <= 10.5 && delta > 5.5 && node.status === 'CLEAR') {
           node.status = 'PRE_ALERT';
           node.etaSec = 28;
           node.sensors = { cam: true, vib: false, radarKmh: 54 };
